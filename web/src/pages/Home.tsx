@@ -83,7 +83,8 @@ export default function Home() {
               {c.banner_url && <img src={`${c.banner_url}=w1060`} alt="" className="size-full object-cover opacity-80 transition group-hover:opacity-100" />}
               <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 to-transparent" />
             </div>
-            <div className="-mt-9 flex items-end gap-3 px-4">
+            {/* relative: the banner above is positioned, so without this it paints over the avatar's top half */}
+            <div className="relative -mt-9 flex items-end gap-3 px-4">
               <img src={c.thumbnail_url ?? ''} alt="" className="size-[68px] rounded-full bg-neutral-800 ring-4 ring-neutral-950" />
               <div className="min-w-0 pb-1">
                 <h2 className="truncate font-semibold">{c.title}</h2>

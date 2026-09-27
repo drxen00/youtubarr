@@ -66,7 +66,7 @@ export default function DownloadMenu({ series, onChange }: { series: Series[]; o
         <Icon name="chevronDown" size={14} className={`transition ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
-        <div className={`fade-up absolute right-0 z-40 mt-2 w-80 overflow-hidden ${cls.card} bg-neutral-950/95 shadow-2xl shadow-black/60 backdrop-blur-xl`}>
+        <div className="fade-up absolute right-0 z-40 mt-2 w-80 overflow-hidden rounded-2xl border border-white/10 bg-neutral-900 shadow-2xl shadow-black/70 ring-1 ring-black/40">
           <div className="border-b border-white/[0.06] px-3 py-2.5 text-xs leading-relaxed text-neutral-400">
             Downloads land on the Unraid box and are <b className="text-neutral-200">shared</b>: once a video is there, everyone streams it from your server instead of YouTube.
           </div>
