@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>youtubarr</Name>
+  <Repository>ghcr.io/drxen00/youtubarr:latest</Repository>
+  <Registry>https://github.com/drxen00/youtubarr/pkgs/container/youtubarr</Registry>
+  <Network>bridge</Network>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/drxen00/youtubarr/issues</Support>
+  <Project>https://github.com/drxen00/youtubarr</Project>
+  <Overview>Self-hosted, series-aware YouTube back-catalogue browser. Index a creator's channel, sort uploads into series with title rules, and watch with a player built for walking a series episode by episode. Optional yt-dlp downloads. Needs a free YouTube Data API v3 key.</Overview>
+  <Category>MediaApp:Video</Category>
+  <WebUI>http://[IP]:[PORT:8790]</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/drxen00/youtubarr/main/unraid/youtubarr.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/drxen00/youtubarr/main/unraid/icon.png</Icon>
+  <ExtraParams>--health-cmd "wget -qO- http://127.0.0.1:8790/api/health || exit 1"</ExtraParams>
+  <DonateText/>
+  <DonateLink/>
+  <Config Name="WebUI" Target="8790" Default="8790" Mode="tcp" Description="HTTP port" Type="Port" Display="always" Required="true" Mask="false">8790</Config>
+  <Config Name="Data" Target="/data" Default="/mnt/user/appdata/youtubarr" Mode="rw" Description="SQLite database" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/youtubarr</Config>
+  <Config Name="Media" Target="/media" Default="/mnt/user/media/youtubarr" Mode="rw" Description="Where yt-dlp downloads land (optional feature; can stay empty)" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/media/youtubarr</Config>
+  <Config Name="YouTube API key" Target="YOUTUBE_API_KEY" Default="" Mode="" Description="YouTube Data API v3 key. Can also be set later from the app's Settings page." Type="Variable" Display="always" Required="false" Mask="true"></Config>
+  <Config Name="App password" Target="APP_PASSWORD" Default="" Mode="" Description="Single-user login. Strongly recommended if exposed through a Cloudflare tunnel." Type="Variable" Display="always" Required="false" Mask="true"></Config>
+  <Config Name="Timezone" Target="TZ" Default="America/New_York" Mode="" Description="" Type="Variable" Display="advanced" Required="false" Mask="false">America/New_York</Config>
+</Container>

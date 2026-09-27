@@ -20,6 +20,16 @@ Built for Unraid + a Cloudflare tunnel, so it's one container, mobile-first, and
 
 ## Run it (Unraid / Docker)
 
+**Unraid, one click:** Docker tab → **Add Container** → paste the template URL into the *Template* box, or drop
+[`unraid/youtubarr.xml`](unraid/youtubarr.xml) into `/boot/config/plugins/dockerMan/templates-user/` and pick it from the
+*Template* dropdown:
+
+```
+https://raw.githubusercontent.com/drxen00/youtubarr/main/unraid/youtubarr.xml
+```
+
+**Docker Compose:**
+
 ```yaml
 services:
   youtubarr:
