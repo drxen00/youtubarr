@@ -50,13 +50,13 @@ export function loadRules(channelId: string): CompiledRule[] {
   return compileRules(rows)
 }
 
-/** Re-runs rules over every non-manually-assigned video in the channel. */
+/** Re-runs rules over every video the rules engine owns (not manual picks, not playlist picks). */
 export function applyRules(channelId: string): { assigned: number; cleared: number; unchanged: number } {
   const rules = loadRules(channelId)
   const videos = db
-    .prepare('SELECT id, title, series_id FROM videos WHERE channel_id = ? AND series_manual = 0')
+    .prepare(`SELECT id, title, series_id FROM videos WHERE channel_id = ? AND (series_source IS NULL OR series_source = 'rule')`)
     .all(channelId) as { id: string; title: string; series_id: number | null }[]
-  const update = db.prepare('UPDATE videos SET series_id = ? WHERE id = ?')
+  const update = db.prepare(`UPDATE videos SET series_id = ?, series_source = CASE WHEN ? IS NULL THEN NULL ELSE 'rule' END WHERE id = ?`)
   let assigned = 0
   let cleared = 0
   let unchanged = 0
@@ -67,7 +67,7 @@ export function applyRules(channelId: string): { assigned: number; cleared: numb
         unchanged++
         continue
       }
-      update.run(next, v.id)
+      update.run(next, next, v.id)
       if (next === null) cleared++
       else assigned++
     }
@@ -112,7 +112,7 @@ export function findSeedFor(channelId: string, handle: string | null): string | 
 export function importSeed(channelId: string, file: string): { series: number; rules: number } {
   const seed = JSON.parse(fs.readFileSync(path.join(config.seedsDir, path.basename(file)), 'utf8')) as SeedFile
   const insertSeries = db.prepare(
-    `INSERT INTO series (channel_id, name, color, priority) VALUES (?, ?, ?, ?)
+    `INSERT INTO series (channel_id, name, color, priority, source) VALUES (?, ?, ?, ?, 'seed')
      ON CONFLICT(channel_id, name) DO UPDATE SET color = COALESCE(series.color, excluded.color)
      RETURNING id`,
   )

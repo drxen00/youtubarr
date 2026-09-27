@@ -4,6 +4,7 @@ import { api, qs, type Channel, type Page, type Series, type Video } from '../ap
 import { useApi, useInterval } from '../hooks'
 import Timeline, { type Bucket } from '../components/Timeline'
 import VideoCard from '../components/VideoCard'
+import Organise from '../components/Organise'
 import { fmtCount, fmtRelative } from '../lib/format'
 
 const PAGE = 60
@@ -76,7 +77,7 @@ export default function ChannelPage() {
             <p className="mt-1 text-xs text-neutral-500">
               {syncing ? (
                 <span className="text-accent">
-                  Indexing {c.sync.fetched}/{c.sync.total || '?'}…
+                  {c.sync.phase === 'organising' ? 'Organising into series…' : `Indexing ${c.sync.fetched}/${c.sync.total || '?'}…`}
                 </span>
               ) : c.sync.state === 'error' ? (
                 <span className="text-red-400">Sync failed: {c.sync.error}</span>
@@ -155,6 +156,16 @@ export default function ChannelPage() {
               ))}
           </div>
         </section>
+      )}
+
+      {c && !syncing && (
+        <Organise
+          channelId={channelId}
+          onChange={() => {
+            seriesList.reload()
+            page.reload()
+          }}
+        />
       )}
 
       {timeline.data && timeline.data.length > 1 && (

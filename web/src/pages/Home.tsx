@@ -78,7 +78,7 @@ export default function Home() {
               </span>
               {c.sync.state === 'running' ? (
                 <span className="text-accent">
-                  Indexing {c.sync.fetched}/{c.sync.total || '?'}
+                  {c.sync.phase === 'organising' ? 'Organising…' : `Indexing ${c.sync.fetched}/${c.sync.total || '?'}`}
                 </span>
               ) : c.sync.state === 'error' ? (
                 <span className="text-red-400" title={c.sync.error}>

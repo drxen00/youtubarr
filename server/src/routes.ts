@@ -1,7 +1,8 @@
 import type { FastifyInstance } from 'fastify'
 import { config } from './config.js'
 import { db, getSetting, setSetting } from './db.js'
-import { addChannel, syncChannel, syncStatus } from './indexer.js'
+import { addChannel, apiKey, syncChannel, syncStatus } from './indexer.js'
+import { autoOrganise, createFromSuggestions, importPlaylists, suggestForChannel } from './organise.js'
 import { applyRules, findSeedFor, importSeed, listSeeds } from './series.js'
 import * as downloads from './downloads.js'
 import { authRequired } from './auth.js'
@@ -200,6 +201,34 @@ export function registerRoutes(app: FastifyInstance) {
 
   app.post<{ Params: { id: string } }>('/api/channels/:id/series/apply', async (req) => applyRules(req.params.id))
 
+  // ---- automatic organisers -------------------------------------------------
+  app.post<{ Params: { id: string } }>('/api/channels/:id/organise/playlists', async (req, reply) => {
+    if (!db.prepare('SELECT 1 FROM channels WHERE id = ?').get(req.params.id)) return bad(reply, 'not found', 404)
+    try {
+      return await importPlaylists(apiKey(), req.params.id)
+    } catch (e) {
+      if (e instanceof YouTubeApiError) return bad(reply, e.message)
+      throw e
+    }
+  })
+  app.post<{ Params: { id: string } }>('/api/channels/:id/organise/auto', async (req, reply) => {
+    if (!db.prepare('SELECT 1 FROM channels WHERE id = ?').get(req.params.id)) return bad(reply, 'not found', 404)
+    try {
+      return await autoOrganise(apiKey(), req.params.id)
+    } catch (e) {
+      if (e instanceof YouTubeApiError) return bad(reply, e.message)
+      throw e
+    }
+  })
+  app.get<{ Params: { id: string }; Querystring: { min?: string } }>('/api/channels/:id/organise/suggest', async (req) =>
+    suggestForChannel(req.params.id, Math.max(2, Number(req.query.min) || 3)),
+  )
+  app.post<{ Params: { id: string }; Body: { picks?: { name: string; pattern: string }[] } }>('/api/channels/:id/organise/create', async (req, reply) => {
+    const picks = req.body?.picks
+    if (!Array.isArray(picks) || picks.length === 0) return bad(reply, 'picks required')
+    return { created: createFromSuggestions(req.params.id, picks) }
+  })
+
   app.post<{ Params: { id: string }; Body: { file?: string } }>('/api/channels/:id/series/import-seed', async (req, reply) => {
     const c = db.prepare('SELECT handle FROM channels WHERE id = ?').get(req.params.id) as { handle: string | null } | undefined
     if (!c) return bad(reply, 'not found', 404)
@@ -309,14 +338,14 @@ export function registerRoutes(app: FastifyInstance) {
     if (!db.prepare('SELECT 1 FROM videos WHERE id = ?').get(req.params.id)) return bad(reply, 'not found', 404)
     const sid = req.body?.seriesId ?? null
     if (sid !== null && !db.prepare('SELECT 1 FROM series WHERE id = ?').get(sid)) return bad(reply, 'series not found', 404)
-    db.prepare('UPDATE videos SET series_id = ?, series_manual = 1 WHERE id = ?').run(sid, req.params.id)
+    db.prepare(`UPDATE videos SET series_id = ?, series_manual = 1, series_source = 'manual' WHERE id = ?`).run(sid, req.params.id)
     return { ok: true }
   })
 
   /** Clears a manual override so rules apply again. */
   app.delete<{ Params: { id: string } }>('/api/videos/:id/series', async (req) => {
     const v = db.prepare('SELECT channel_id FROM videos WHERE id = ?').get(req.params.id) as { channel_id: string } | undefined
-    db.prepare('UPDATE videos SET series_manual = 0 WHERE id = ?').run(req.params.id)
+    db.prepare('UPDATE videos SET series_manual = 0, series_source = NULL WHERE id = ?').run(req.params.id)
     if (v) applyRules(v.channel_id)
     return { ok: true }
   })

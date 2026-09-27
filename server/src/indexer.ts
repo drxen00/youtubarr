@@ -2,6 +2,7 @@ import { db, getSetting, transaction } from './db.js'
 import { config } from './config.js'
 import { fetchChannel, fetchVideos, playlistVideoIds, YouTubeApiError } from './youtube.js'
 import { applyRules, findSeedFor, importSeed } from './series.js'
+import { autoOrganise } from './organise.js'
 
 export function apiKey(): string {
   const key = getSetting('youtube_api_key') || config.youtubeApiKey
@@ -11,6 +12,7 @@ export function apiKey(): string {
 
 export interface SyncStatus {
   state: 'idle' | 'running' | 'error'
+  phase?: 'fetching' | 'organising'
   full: boolean
   fetched: number
   total: number
@@ -67,7 +69,7 @@ export async function syncChannel(channelId: string, opts: { full?: boolean } = 
     | undefined
   if (!ch) throw new Error('channel not found')
 
-  const st: SyncStatus = { state: 'running', full: !!opts.full, fetched: 0, total: ch.video_count, startedAt: new Date().toISOString() }
+  const st: SyncStatus = { state: 'running', phase: 'fetching', full: !!opts.full, fetched: 0, total: ch.video_count, startedAt: new Date().toISOString() }
   status.set(channelId, st)
 
   try {
@@ -102,6 +104,15 @@ export async function syncChannel(channelId: string, opts: { full?: boolean } = 
     applyRules(channelId)
     db.prepare('UPDATE channels SET last_synced_at = ?, video_count = (SELECT COUNT(*) FROM videos WHERE channel_id = ? AND unavailable = 0) WHERE id = ?')
       .run(new Date().toISOString(), channelId, channelId)
+
+    // First full sync of a channel with no bundled ruleset: pull its playlists and detect series from titles.
+    const ch2 = db.prepare('SELECT auto_organised, (SELECT COUNT(*) FROM series WHERE channel_id = channels.id) AS n FROM channels WHERE id = ?').get(channelId) as
+      | { auto_organised: number; n: number }
+      | undefined
+    if (opts.full && ch2 && !ch2.auto_organised && ch2.n === 0) {
+      st.phase = 'organising'
+      await autoOrganise(key, channelId)
+    }
     st.state = 'idle'
   } catch (e) {
     st.state = 'error'

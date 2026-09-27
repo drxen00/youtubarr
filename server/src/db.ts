@@ -83,6 +83,14 @@ const migrations: string[] = [
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
   );
   `,
+  // 2: where a series / an assignment came from, so rule re-runs don't clobber playlist or manual picks.
+  `
+  ALTER TABLE series ADD COLUMN source TEXT NOT NULL DEFAULT 'rules';   -- rules | playlist | detected | seed
+  ALTER TABLE series ADD COLUMN playlist_id TEXT;
+  ALTER TABLE videos ADD COLUMN series_source TEXT;                     -- rule | playlist | manual
+  UPDATE videos SET series_source = CASE WHEN series_manual = 1 THEN 'manual' WHEN series_id IS NOT NULL THEN 'rule' END;
+  ALTER TABLE channels ADD COLUMN auto_organised INTEGER NOT NULL DEFAULT 0;
+  `,
 ]
 
 function migrate() {

@@ -113,6 +113,26 @@ export async function* playlistVideoIds(apiKey: string, playlistId: string): Asy
   } while (pageToken)
 }
 
+export interface PlaylistInfo {
+  id: string
+  title: string
+  itemCount: number
+}
+
+/** All playlists the channel itself created (1 unit per 50). */
+export async function fetchChannelPlaylists(apiKey: string, channelId: string): Promise<PlaylistInfo[]> {
+  const out: PlaylistInfo[] = []
+  let pageToken: string | undefined
+  do {
+    const params: Record<string, string> = { part: 'snippet,contentDetails', channelId, maxResults: '50' }
+    if (pageToken) params.pageToken = pageToken
+    const data = await get(apiKey, 'playlists', params)
+    for (const p of data.items ?? []) out.push({ id: p.id, title: p.snippet.title, itemCount: Number(p.contentDetails?.itemCount ?? 0) })
+    pageToken = data.nextPageToken
+  } while (pageToken)
+  return out
+}
+
 /** ISO 8601 duration (PT1H2M3S) -> seconds. */
 export function parseDuration(iso: string | undefined): number {
   if (!iso) return 0

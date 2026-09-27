@@ -37,6 +37,7 @@ export async function api<T>(path: string, init?: RequestInit & { json?: unknown
 
 export interface SyncStatus {
   state: 'idle' | 'running' | 'error'
+  phase?: 'fetching' | 'organising'
   full: boolean
   fetched: number
   total: number
@@ -92,12 +93,22 @@ export interface VideoDetail extends Video {
   localFile: boolean
 }
 
+export interface Suggestion {
+  name: string
+  pattern: string
+  count: number
+  videoIds: string[]
+  sample: string[]
+}
+
 export interface Series {
   id: number
   channel_id: string
   name: string
   color: string | null
   priority: number
+  source: 'rules' | 'playlist' | 'detected' | 'seed'
+  playlist_id: string | null
   video_count: number
   first_at: string | null
   last_at: string | null
