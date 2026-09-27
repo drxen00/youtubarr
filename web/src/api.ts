@@ -33,6 +33,13 @@ export async function api<T>(path: string, init?: RequestInit & { json?: unknown
   return (await res.json()) as T
 }
 
+export function qs(params: Record<string, string | number | undefined | null>): string {
+  const u = new URLSearchParams()
+  for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== null && v !== '') u.set(k, String(v))
+  const s = u.toString()
+  return s ? `?${s}` : ''
+}
+
 // ---- types (mirror server/src/routes.ts) ------------------------------------
 
 export interface User {
@@ -71,9 +78,14 @@ export interface Channel {
   last_synced_at: string | null
   indexed_count?: number
   series_count?: number
+  downloaded_count?: number
+  organised: boolean
+  seed?: string | null
   sync: SyncStatus
   years?: { year: string; count: number }[]
 }
+
+export type SeriesSource = 'rules' | 'playlist' | 'detected' | 'seed'
 
 export interface Video {
   id: string
@@ -83,15 +95,15 @@ export interface Video {
   duration_seconds: number
   thumbnail_url: string | null
   view_count: number | null
-  series_id: number | null
-  series_manual: number
   unavailable: number
+  series_id: number | null
+  series_source: 'rule' | 'playlist' | 'manual' | null
   series_name: string | null
   series_color: string | null
   progress_position: number | null
   progress_duration: number | null
   progress_completed: number | null
-  download_status: string | null
+  download_status: 'queued' | 'downloading' | 'done' | 'error' | null
   download_progress: number | null
 }
 
@@ -107,21 +119,14 @@ export interface VideoDetail extends Video {
   localFile: boolean
 }
 
-export interface Suggestion {
-  name: string
-  pattern: string
-  count: number
-  videoIds: string[]
-  sample: string[]
-}
-
 export interface Series {
   id: number
+  user_id: number
   channel_id: string
   name: string
   color: string | null
   priority: number
-  source: 'rules' | 'playlist' | 'detected' | 'seed'
+  source: SeriesSource
   playlist_id: string | null
   video_count: number
   first_at: string | null
@@ -129,6 +134,7 @@ export interface Series {
   thumbnail_url: string | null
   rule_count: number
   watched_count: number
+  downloaded_count: number
 }
 
 export interface Rule {
@@ -139,9 +145,31 @@ export interface Rule {
   enabled: number
 }
 
-export interface SeriesDetail extends Omit<Series, 'video_count' | 'first_at' | 'last_at' | 'thumbnail_url' | 'rule_count' | 'watched_count'> {
+export interface SeriesDetail {
+  id: number
+  user_id: number
+  channel_id: string
+  name: string
+  color: string | null
+  priority: number
+  source: SeriesSource
+  playlist_id: string | null
   rules: Rule[]
   videos: Video[]
+}
+
+export interface Suggestion {
+  name: string
+  pattern: string
+  count: number
+  videoIds: string[]
+  sample: string[]
+}
+
+export interface OrganiseInfo {
+  organised: boolean
+  seed: string | null
+  others: { user_id: number; username: string; series_count: number; assigned_count: number }[]
 }
 
 export interface Page<T> {
@@ -154,7 +182,6 @@ export interface Page<T> {
 export interface Settings {
   youtubeApiKeySet: boolean
   youtubeApiKeyFromEnv: boolean
-  ytDlpVersion: string | null
   mediaDir: string
   dataDir: string
   seeds: { file: string; channels: string[]; seriesCount: number }[]
@@ -171,11 +198,10 @@ export interface Download {
   title: string
   thumbnail_url: string | null
   channel_id: string
+  duration_seconds: number
 }
 
-export function qs(params: Record<string, string | number | undefined | null>): string {
-  const u = new URLSearchParams()
-  for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== null && v !== '') u.set(k, String(v))
-  const s = u.toString()
-  return s ? `?${s}` : ''
+export interface DownloadsResponse {
+  ytDlpVersion: string | null
+  items: Download[]
 }

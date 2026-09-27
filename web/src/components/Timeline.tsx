@@ -57,24 +57,26 @@ export default function Timeline({ buckets, value, onChange }: { buckets: Bucket
 
   return (
     <div className="select-none">
-      <div className="mb-1 flex items-center justify-between text-xs text-neutral-400">
-        <span>{value ? `From ${fmtMonth(value)}` : 'Timeline — drag to jump to a point in time'}</span>
-        {value && (
+      <div className="mb-2 flex items-center justify-between text-xs">
+        <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-neutral-500">{value ? `From ${fmtMonth(value)}` : 'Timeline'}</span>
+        {value ? (
           <button onClick={() => onChange(null)} className="text-neutral-300 hover:text-white">
             Clear
           </button>
+        ) : (
+          <span className="text-neutral-600">drag to jump to a point in time</span>
         )}
       </div>
       <div
         ref={ref}
         onPointerDown={onPointer}
         onPointerMove={onPointer}
-        className="relative flex h-16 cursor-ew-resize items-end gap-px rounded-md bg-neutral-900 px-1 pt-1 touch-none"
+        className="relative flex h-16 cursor-ew-resize items-end gap-px rounded-lg bg-black/30 px-1 pt-1 touch-none"
       >
         {months.map((b, i) => (
           <div
             key={b.month}
-            className={`flex-1 rounded-t-sm ${selectedIdx >= 0 && i < selectedIdx ? 'bg-neutral-700' : i === selectedIdx ? 'bg-accent' : 'bg-neutral-500'}`}
+            className={`flex-1 rounded-t-sm transition-colors ${selectedIdx >= 0 && i < selectedIdx ? 'bg-white/15' : i === selectedIdx ? 'bg-accent' : 'bg-white/40'}`}
             style={{ height: `${Math.max(4, (100 * b.count) / max)}%` }}
           />
         ))}

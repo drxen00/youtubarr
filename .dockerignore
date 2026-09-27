@@ -1,0 +1,12 @@
+**/node_modules
+**/dist
+**/data
+**/media
+**/*.db
+**/*.db-*
+.git
+.github
+.claude
+.env
+.env.*
+!.env.example

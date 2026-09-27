@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { api, type Series, type SeriesDetail, type Video, type VideoDetail } from '../api'
-import { useApi, useLocalStorage } from '../hooks'
+import { useApi, useInterval, useLocalStorage } from '../hooks'
 import { useIsAdmin } from '../auth'
 import Player, { type PlayerHandle, type PlayerState } from '../components/Player'
 import VideoCard, { SeriesPill } from '../components/VideoCard'
+import BackLink from '../components/BackLink'
 import { fmtCount, fmtDate, fmtDuration } from '../lib/format'
+import { cls, Icon, Spinner } from '../ui'
 
 const RATES = [0.75, 1, 1.25, 1.5, 1.75, 2]
 
@@ -29,8 +31,9 @@ export default function WatchPage() {
 
   const local = !!v?.localFile && preferLocal
   const startAt = v && !v.progress_completed && (v.progress_position ?? 0) > 20 ? v.progress_position! : 0
+  const downloading = v?.download_status === 'queued' || v?.download_status === 'downloading'
+  useInterval(video.reload, 3000, !!downloading)
 
-  // Save progress every 5s while playing, and once on unmount.
   const save = useCallback(
     (pos: number, dur: number, completed?: boolean) => {
       if (!videoId || dur <= 0) return
@@ -60,7 +63,6 @@ export default function WatchPage() {
     if (autoplay && v?.nextInSeries) goTo(v.nextInSeries)
   }, [autoplay, v, goTo, save])
 
-  // Keyboard shortcuts
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement
@@ -101,144 +103,139 @@ export default function WatchPage() {
   const bufPct = state.duration ? (100 * state.buffered) / state.duration : 0
 
   return (
-    <div className="mx-auto max-w-screen-2xl lg:flex lg:gap-6 lg:px-4 lg:py-4">
+    <div className="mx-auto max-w-screen-2xl lg:flex lg:gap-6 lg:px-4 lg:pb-8">
       {/* ---- main column */}
       <div className="min-w-0 flex-1">
-        <div className="sticky top-0 z-20 bg-black lg:static lg:overflow-hidden lg:rounded-xl">
-          <Player key={`${videoId}-${local}`} ref={player} videoId={videoId} local={local} startAt={startAt} rate={rate} onState={setState} onEnded={onEnded} />
+        <div className="sticky top-0 z-20 bg-neutral-950 lg:static">
+          <div className="flex h-11 items-center gap-2 px-2 lg:px-0">
+            <BackLink to={`/c/${v.channel_id}`} label={v.channel.title} />
+            {v.series_id && v.series_name && (
+              <Link to={`/series/${v.series_id}`} className="ml-auto min-w-0">
+                <SeriesPill name={`${v.series_name}${v.episode ? ` · ${v.episode.index}/${v.episode.total}` : ''}`} color={v.series_color} />
+              </Link>
+            )}
+          </div>
+          <div className="bg-black lg:overflow-hidden lg:rounded-2xl lg:ring-1 lg:ring-white/[0.06]">
+            <Player key={`${videoId}-${local}`} ref={player} videoId={videoId} local={local} startAt={startAt} rate={rate} onState={setState} onEnded={onEnded} />
+          </div>
         </div>
 
-        {/* ---- our chrome: progress + transport */}
-        <div className="bg-neutral-950 px-3 pt-2 lg:px-0">
+        {/* ---- chrome: progress + transport */}
+        <div className="px-3 pt-3 lg:px-0">
           <div
-            className="group relative h-1.5 cursor-pointer rounded-full bg-neutral-800"
+            className="group relative h-1.5 cursor-pointer rounded-full bg-white/10"
             onClick={(e) => {
               const r = e.currentTarget.getBoundingClientRect()
               player.current?.seekTo(((e.clientX - r.left) / r.width) * state.duration)
             }}
           >
-            <div className="absolute inset-y-0 left-0 rounded-full bg-neutral-600" style={{ width: `${bufPct}%` }} />
+            <div className="absolute inset-y-0 left-0 rounded-full bg-white/20" style={{ width: `${bufPct}%` }} />
             <div className="absolute inset-y-0 left-0 rounded-full bg-accent" style={{ width: `${pct}%` }} />
+            <div className="absolute top-1/2 size-3 -translate-y-1/2 rounded-full bg-white opacity-0 shadow transition group-hover:opacity-100" style={{ left: `calc(${pct}% - 6px)` }} />
           </div>
-          <div className="mt-2 flex items-center gap-1 text-sm">
-            <NavBtn title="Previous in series (Shift+P)" disabled={!v.prevInSeries} onClick={() => goTo(v.prevInSeries)}>
-              ⏮
-            </NavBtn>
-            <NavBtn title="Back 10s (J)" onClick={() => player.current?.seekBy(-10)}>
-              ↺10
-            </NavBtn>
-            <NavBtn title="Play/pause (K)" onClick={() => player.current?.toggle()} className="min-w-10 text-lg">
-              {state.playing ? '❚❚' : '▶'}
-            </NavBtn>
-            <NavBtn title="Forward 10s (L)" onClick={() => player.current?.seekBy(10)}>
-              10↻
-            </NavBtn>
-            <NavBtn title="Next in series (Shift+N)" disabled={!v.nextInSeries} onClick={() => goTo(v.nextInSeries)}>
-              ⏭
-            </NavBtn>
-            <span className="ml-2 tabular-nums text-xs text-neutral-400">
-              {fmtDuration(state.position)} / {fmtDuration(state.duration || v.duration_seconds)}
+
+          <div className="mt-2.5 flex items-center gap-0.5">
+            <Ctl title="Previous in series (Shift+P)" disabled={!v.prevInSeries} onClick={() => goTo(v.prevInSeries)}>
+              <Icon name="skipBack" size={18} />
+            </Ctl>
+            <Ctl title="Back 10s (J)" onClick={() => player.current?.seekBy(-10)}>
+              <Icon name="rewind" size={18} />
+            </Ctl>
+            <Ctl title="Play/pause (K)" onClick={() => player.current?.toggle()} className="mx-0.5 size-10 rounded-full bg-white text-black hover:bg-neutral-200">
+              <Icon name={state.playing ? 'pause' : 'play'} size={18} />
+            </Ctl>
+            <Ctl title="Forward 10s (L)" onClick={() => player.current?.seekBy(10)}>
+              <Icon name="forward" size={18} />
+            </Ctl>
+            <Ctl title="Next in series (Shift+N)" disabled={!v.nextInSeries} onClick={() => goTo(v.nextInSeries)}>
+              <Icon name="skipFwd" size={18} />
+            </Ctl>
+            <span className="ml-2 text-xs tabular-nums text-neutral-400">
+              {fmtDuration(state.position)} <span className="text-neutral-600">/</span> {fmtDuration(state.duration || v.duration_seconds)}
             </span>
             <div className="ml-auto flex items-center gap-1">
-              <select value={rate} onChange={(e) => setRate(Number(e.target.value))} className="rounded-md bg-neutral-800 px-1.5 py-1 text-xs" title="Speed">
+              <select value={rate} onChange={(e) => setRate(Number(e.target.value))} className={`${cls.select} py-1 text-xs`} title="Speed">
                 {RATES.map((r) => (
                   <option key={r} value={r}>
                     {r}×
                   </option>
                 ))}
               </select>
-              <button
-                onClick={() => setAutoplay(!autoplay)}
-                title="Autoplay next episode"
-                className={`rounded-md px-2 py-1 text-xs ${autoplay ? 'bg-accent text-white' : 'bg-neutral-800 text-neutral-300'}`}
-              >
+              <button onClick={() => setAutoplay(!autoplay)} title="Autoplay next episode" className={`rounded-lg px-2 py-1 text-xs font-medium transition ${autoplay ? 'bg-accent text-white' : 'bg-white/5 text-neutral-400 hover:bg-white/10'}`}>
                 Auto
               </button>
               {v.localFile && (
                 <button
                   onClick={() => setPreferLocal(!preferLocal)}
-                  title="Toggle between the downloaded file and the YouTube embed"
-                  className={`rounded-md px-2 py-1 text-xs ${local ? 'bg-emerald-600 text-white' : 'bg-neutral-800 text-neutral-300'}`}
+                  title="Stream from your server (on) or from YouTube (off)"
+                  className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium transition ${local ? 'bg-emerald-600 text-white' : 'bg-white/5 text-neutral-400 hover:bg-white/10'}`}
                 >
-                  Local
+                  <Icon name="server" size={12} /> Server
                 </button>
               )}
-              <NavBtn title="Fullscreen (F)" onClick={() => player.current?.fullscreen()}>
-                ⛶
-              </NavBtn>
+              <Ctl title="Fullscreen (F)" onClick={() => player.current?.fullscreen()}>
+                <Icon name="fullscreen" size={17} />
+              </Ctl>
             </div>
           </div>
 
           {/* ---- older / newer (whole channel) */}
-          <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-            <button
-              disabled={!v.older}
-              onClick={() => goTo(v.older)}
-              className="truncate rounded-lg border border-neutral-800 px-3 py-2 text-left hover:bg-neutral-900 disabled:opacity-40"
-              title="Older upload ( [ )"
-            >
-              <span className="text-neutral-500">← Older · {fmtDate(v.older?.published_at)}</span>
-              <div className="truncate">{v.older?.title ?? '—'}</div>
+          <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+            <button disabled={!v.older} onClick={() => goTo(v.older)} className={`truncate p-3 text-left transition hover:border-white/20 hover:bg-white/[0.05] disabled:opacity-40 ${cls.card}`} title="Older upload ( [ )">
+              <span className="flex items-center gap-1 text-neutral-500">
+                <Icon name="back" size={12} /> Older · {fmtDate(v.older?.published_at)}
+              </span>
+              <span className="mt-0.5 block truncate text-[13px] text-neutral-200">{v.older?.title ?? '—'}</span>
             </button>
-            <button
-              disabled={!v.newer}
-              onClick={() => goTo(v.newer)}
-              className="truncate rounded-lg border border-neutral-800 px-3 py-2 text-right hover:bg-neutral-900 disabled:opacity-40"
-              title="Newer upload ( ] )"
-            >
-              <span className="text-neutral-500">Newer · {fmtDate(v.newer?.published_at)} →</span>
-              <div className="truncate">{v.newer?.title ?? '—'}</div>
+            <button disabled={!v.newer} onClick={() => goTo(v.newer)} className={`truncate p-3 text-right transition hover:border-white/20 hover:bg-white/[0.05] disabled:opacity-40 ${cls.card}`} title="Newer upload ( ] )">
+              <span className="flex items-center justify-end gap-1 text-neutral-500">
+                Newer · {fmtDate(v.newer?.published_at)} <Icon name="chevronRight" size={12} />
+              </span>
+              <span className="mt-0.5 block truncate text-[13px] text-neutral-200">{v.newer?.title ?? '—'}</span>
             </button>
           </div>
 
           {/* ---- title & meta */}
-          <div className="mt-4">
-            <h1 className="text-lg font-semibold leading-snug">{v.title}</h1>
-            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-neutral-400">
+          <div className="mt-5">
+            <h1 className="text-lg font-semibold leading-snug tracking-tight">{v.title}</h1>
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-neutral-400">
               <Link to={`/c/${v.channel_id}`} className="flex items-center gap-1.5 hover:text-white">
                 {v.channel.thumbnail_url && <img src={v.channel.thumbnail_url} alt="" className="size-5 rounded-full" />}
                 {v.channel.title}
               </Link>
               <span>· {fmtDate(v.published_at)}</span>
               {v.view_count != null && <span>· {fmtCount(v.view_count)} views</span>}
-              {v.series_id && v.series_name && (
-                <Link to={`/series/${v.series_id}`}>
-                  <SeriesPill name={`${v.series_name}${v.episode ? ` · ${v.episode.index}/${v.episode.total}` : ''}`} color={v.series_color} />
-                </Link>
-              )}
-              {isAdmin && (
-                <>
-                  <select
-                    value={v.series_id ?? ''}
-                    onChange={(e) =>
-                      api(`/api/videos/${v.id}/series`, { method: 'PUT', json: { seriesId: e.target.value ? Number(e.target.value) : null } }).then(video.reload)
-                    }
-                    className="rounded-md bg-neutral-800 px-1.5 py-0.5 text-xs"
-                    title="Assign this video to a series"
-                  >
-                    <option value="">— no series —</option>
-                    {allSeries.data?.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
-                  {v.series_manual === 1 && (
-                    <button onClick={() => api(`/api/videos/${v.id}/series`, { method: 'DELETE' }).then(video.reload)} className="underline" title="Remove manual override">
-                      manual
-                    </button>
-                  )}
-                  <DownloadButton v={v} onChange={video.reload} />
-                </>
-              )}
-              <a href={`https://www.youtube.com/watch?v=${v.id}`} target="_blank" rel="noreferrer" className="hover:text-white">
-                YouTube ↗
+              <a href={`https://www.youtube.com/watch?v=${v.id}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:text-white">
+                YouTube <Icon name="external" size={11} />
               </a>
             </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <DownloadButton v={v} onChange={video.reload} canDelete={isAdmin} />
+              <select
+                value={v.series_id ?? ''}
+                onChange={(e) => api(`/api/videos/${v.id}/series`, { method: 'PUT', json: { seriesId: e.target.value ? Number(e.target.value) : null } }).then(video.reload)}
+                className={`${cls.select} py-1.5 text-xs`}
+                title="Which of your series this video belongs to"
+              >
+                <option value="">— no series —</option>
+                {allSeries.data?.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+              {v.series_source === 'manual' && (
+                <button onClick={() => api(`/api/videos/${v.id}/series`, { method: 'DELETE' }).then(video.reload)} className={`${cls.ghost} text-xs`} title="Remove your manual override and let rules decide">
+                  <Icon name="x" size={12} /> manual pick
+                </button>
+              )}
+            </div>
+
             {v.description && (
-              <div className="mt-3 text-sm text-neutral-300">
+              <div className="mt-4 text-sm text-neutral-300">
                 <p className={showDesc ? 'whitespace-pre-wrap' : 'line-clamp-2 whitespace-pre-wrap'}>{v.description}</p>
-                <button onClick={() => setShowDesc(!showDesc)} className="mt-1 text-xs text-neutral-400 hover:text-white">
+                <button onClick={() => setShowDesc(!showDesc)} className="mt-1 text-xs text-neutral-500 hover:text-white">
                   {showDesc ? 'Show less' : 'Show more'}
                 </button>
               </div>
@@ -247,13 +244,13 @@ export default function WatchPage() {
         </div>
       </div>
 
-      {/* ---- sidebar: series episodes / channel timeline */}
-      <aside className="mt-6 px-3 lg:mt-0 lg:w-96 lg:shrink-0 lg:px-0">
-        <div className="mb-3 flex gap-1 rounded-lg bg-neutral-900 p-1 text-sm">
-          <button onClick={() => setTab('series')} className={`flex-1 rounded-md py-1.5 ${tab === 'series' ? 'bg-neutral-700' : 'text-neutral-400'}`}>
+      {/* ---- sidebar */}
+      <aside className="mt-8 px-3 lg:mt-0 lg:w-96 lg:shrink-0 lg:px-0 lg:pt-11">
+        <div className="mb-3 flex gap-1 rounded-xl bg-white/5 p-1 text-sm">
+          <button onClick={() => setTab('series')} className={`flex-1 truncate rounded-lg py-1.5 transition ${tab === 'series' ? 'bg-white/10 text-white' : 'text-neutral-400 hover:text-white'}`}>
             {v.series_name ?? 'Series'}
           </button>
-          <button onClick={() => setTab('timeline')} className={`flex-1 rounded-md py-1.5 ${tab === 'timeline' ? 'bg-neutral-700' : 'text-neutral-400'}`}>
+          <button onClick={() => setTab('timeline')} className={`flex-1 rounded-lg py-1.5 transition ${tab === 'timeline' ? 'bg-white/10 text-white' : 'text-neutral-400 hover:text-white'}`}>
             Around this date
           </button>
         </div>
@@ -261,8 +258,12 @@ export default function WatchPage() {
           series.data ? (
             <EpisodeList videos={series.data.videos} currentId={v.id} />
           ) : (
-            <p className="text-sm text-neutral-500">
-              Not part of a series.{isAdmin && <> Assign one above, or <Link to={`/series/new?channel=${v.channel_id}`} className="underline">create one</Link>.</>}
+            <p className={`p-4 text-sm text-neutral-500 ${cls.card}`}>
+              Not in any of your series. Pick one above, or{' '}
+              <Link to={`/series/new?channel=${v.channel_id}`} className="underline">
+                create one
+              </Link>
+              .
             </p>
           )
         ) : (
@@ -273,9 +274,9 @@ export default function WatchPage() {
   )
 }
 
-function NavBtn({ children, className = '', ...rest }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+function Ctl({ children, className = '', ...rest }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
-    <button {...rest} className={`rounded-md px-2.5 py-1.5 hover:bg-neutral-800 disabled:opacity-30 disabled:hover:bg-transparent ${className}`}>
+    <button {...rest} className={`grid size-9 place-items-center rounded-full text-neutral-200 transition hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent ${className}`}>
       {children}
     </button>
   )
@@ -287,10 +288,10 @@ function EpisodeList({ videos, currentId }: { videos: Video[]; currentId: string
     ref.current?.querySelector('[data-active="true"]')?.scrollIntoView({ block: 'center' })
   }, [currentId, videos.length])
   return (
-    <ol ref={ref} className="max-h-[70vh] space-y-3 overflow-y-auto pr-1 lg:max-h-[calc(100dvh-8rem)]">
+    <ol ref={ref} className="scroll-thin max-h-[70vh] space-y-3 overflow-y-auto pr-1 lg:max-h-[calc(100dvh-8rem)]">
       {videos.map((ep, i) => (
         <li key={ep.id} data-active={ep.id === currentId} className="flex gap-2">
-          <span className="w-8 shrink-0 pt-1 text-right text-xs tabular-nums text-neutral-500">{i + 1}</span>
+          <span className="w-8 shrink-0 pt-1 text-right text-xs tabular-nums text-neutral-600">{i + 1}</span>
           <div className="min-w-0 flex-1">
             <VideoCard video={ep} compact active={ep.id === currentId} />
           </div>
@@ -309,26 +310,34 @@ function Neighbourhood({ v }: { v: VideoDetail }) {
   return list.data ? <EpisodeList videos={list.data.items} currentId={v.id} /> : null
 }
 
-function DownloadButton({ v, onChange }: { v: VideoDetail; onChange: () => void }) {
+function DownloadButton({ v, onChange, canDelete }: { v: VideoDetail; onChange: () => void; canDelete: boolean }) {
   const st = v.download_status
+  const shared = 'Shared: once it’s on the server, everyone streams it from there'
   if (st === 'done')
-    return (
-      <button onClick={() => confirm('Delete the downloaded file?') && api(`/api/videos/${v.id}/download`, { method: 'DELETE' }).then(onChange)} className="text-emerald-400 hover:text-emerald-300">
-        Downloaded ✓
+    return canDelete ? (
+      <button onClick={() => confirm('Delete the downloaded file from the server? Everyone loses it.') && api(`/api/videos/${v.id}/download`, { method: 'DELETE' }).then(onChange)} className={`${cls.btn} border-emerald-500/40 text-emerald-300`} title="On the server. Click to delete (admin).">
+        <Icon name="check" size={14} /> On server
       </button>
+    ) : (
+      <span className={`${cls.chip} border-emerald-500/30 text-emerald-300`}>
+        <Icon name="server" size={12} /> On server
+      </span>
     )
-  if (st === 'downloading') return <span className="text-accent">Downloading {Math.round(v.download_progress ?? 0)}%</span>
-  if (st === 'queued') return <span className="text-neutral-400">Queued…</span>
+  if (st === 'downloading')
+    return (
+      <span className={`${cls.chip} border-accent/40 text-accent`}>
+        <Spinner /> Downloading {Math.round(v.download_progress ?? 0)}%
+      </span>
+    )
+  if (st === 'queued')
+    return (
+      <span className={cls.chip}>
+        <Icon name="clock" size={12} /> Queued
+      </span>
+    )
   return (
-    <button
-      onClick={() =>
-        api(`/api/videos/${v.id}/download`, { method: 'POST' })
-          .then(onChange)
-          .catch((e: Error) => alert(e.message))
-      }
-      className="hover:text-white"
-    >
-      {st === 'error' ? 'Retry download' : 'Download'}
+    <button onClick={() => api(`/api/videos/${v.id}/download`, { method: 'POST' }).then(onChange).catch((e: Error) => alert(e.message))} className={cls.primary} title={shared}>
+      <Icon name="download" size={14} /> {st === 'error' ? 'Retry download' : 'Download'}
     </button>
   )
 }

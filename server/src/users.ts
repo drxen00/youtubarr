@@ -127,16 +127,26 @@ export function purgeExpiredSessions() {
 
 // ---- bootstrap ----------------------------------------------------------------
 
-/** Folds pre-multi-user watch history into the given user and drops the legacy table. */
+/** Hands pre-multi-user data (watch history, series, assignments) to the given user. */
 function adoptLegacyProgress(userId: number) {
-  const legacy = db.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'watch_progress_legacy'`).get()
-  if (!legacy) return
   transaction(() => {
-    db.prepare(
-      `INSERT OR IGNORE INTO watch_progress (user_id, video_id, position_seconds, duration_seconds, completed, updated_at)
-       SELECT ?, video_id, position_seconds, duration_seconds, completed, updated_at FROM watch_progress_legacy`,
-    ).run(userId)
-    db.exec('DROP TABLE watch_progress_legacy')
+    const legacy = db.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'watch_progress_legacy'`).get()
+    if (legacy) {
+      db.prepare(
+        `INSERT OR IGNORE INTO watch_progress (user_id, video_id, position_seconds, duration_seconds, completed, updated_at)
+         SELECT ?, video_id, position_seconds, duration_seconds, completed, updated_at FROM watch_progress_legacy`,
+      ).run(userId)
+      db.exec('DROP TABLE watch_progress_legacy')
+    }
+    // Series created before per-user series (migration 4 leaves them with user_id NULL).
+    const orphaned = (db.prepare('SELECT COUNT(*) AS n FROM series WHERE user_id IS NULL').get() as { n: number }).n
+    if (orphaned) {
+      db.prepare('UPDATE series SET user_id = ? WHERE user_id IS NULL').run(userId)
+      db.prepare('UPDATE video_series SET user_id = ? WHERE user_id IS NULL').run(userId)
+      db.prepare(
+        `INSERT OR IGNORE INTO user_channels (user_id, channel_id, organised) SELECT DISTINCT ?, channel_id, 1 FROM series WHERE user_id = ?`,
+      ).run(userId, userId)
+    }
   })
 }
 

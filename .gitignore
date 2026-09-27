@@ -3,7 +3,7 @@ dist/
 *.log
 .env
 .env.local
-/data/
-/media/
+data/
+media/
 .DS_Store
 Thumbs.db

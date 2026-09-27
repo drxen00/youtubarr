@@ -8,7 +8,10 @@ export const db = new DatabaseSync(path.join(config.dataDir, 'youtubarr.db'))
 db.exec('PRAGMA journal_mode = WAL')
 db.exec('PRAGMA foreign_keys = ON')
 
-const migrations: string[] = [
+/** A migration is plain SQL, or a function for the rare table rebuild that needs FK enforcement off. */
+type Migration = string | { fkOff: true; sql: string }
+
+const migrations: Migration[] = [
   `
   CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
@@ -122,6 +125,57 @@ const migrations: string[] = [
   );
   CREATE INDEX watch_progress_user_updated ON watch_progress(user_id, updated_at);
   `,
+  // 4: series become per-user. The series table is rebuilt (SQLite can't change a UNIQUE constraint), video
+  // assignments move to video_series keyed by user, and per-user channel setup state gets its own table.
+  // Rows with user_id NULL are pre-multi-user data; bootstrapUsers() hands them to the first admin.
+  {
+    fkOff: true,
+    sql: `
+    CREATE TABLE series_new (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id     INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      channel_id  TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+      name        TEXT NOT NULL,
+      color       TEXT,
+      priority    INTEGER NOT NULL DEFAULT 0,
+      source      TEXT NOT NULL DEFAULT 'rules',
+      playlist_id TEXT,
+      created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      UNIQUE (user_id, channel_id, name)
+    );
+    INSERT INTO series_new (id, user_id, channel_id, name, color, priority, source, playlist_id, created_at)
+      SELECT id, NULL, channel_id, name, color, priority, source, playlist_id, created_at FROM series;
+    DROP TABLE series;
+    ALTER TABLE series_new RENAME TO series;
+    CREATE INDEX series_user_channel ON series(user_id, channel_id);
+
+    -- series_id NULL with source 'manual' means "explicitly in no series", so rules leave it alone.
+    CREATE TABLE video_series (
+      user_id   INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      video_id  TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+      series_id INTEGER REFERENCES series(id) ON DELETE CASCADE,
+      source    TEXT NOT NULL DEFAULT 'rule',   -- rule | playlist | manual
+      PRIMARY KEY (user_id, video_id)
+    );
+    CREATE INDEX video_series_series ON video_series(series_id);
+    INSERT INTO video_series (user_id, video_id, series_id, source)
+      SELECT NULL, id, series_id, CASE WHEN series_manual = 1 THEN 'manual' ELSE COALESCE(series_source, 'rule') END
+      FROM videos WHERE series_id IS NOT NULL OR series_manual = 1;
+
+    DROP INDEX IF EXISTS videos_series_date;
+    ALTER TABLE videos DROP COLUMN series_id;
+    ALTER TABLE videos DROP COLUMN series_manual;
+    ALTER TABLE videos DROP COLUMN series_source;
+
+    CREATE TABLE user_channels (
+      user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+      organised  INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (user_id, channel_id)
+    );
+    ALTER TABLE channels DROP COLUMN auto_organised;
+    `,
+  },
 ]
 
 function migrate() {
@@ -129,17 +183,26 @@ function migrate() {
   const applied = new Set(
     (db.prepare('SELECT id FROM _migrations').all() as { id: number }[]).map((r) => r.id),
   )
-  migrations.forEach((sql, i) => {
+  migrations.forEach((m, i) => {
     const id = i + 1
     if (applied.has(id)) return
+    const fkOff = typeof m !== 'string'
+    const sql = typeof m === 'string' ? m : m.sql
+    if (fkOff) db.exec('PRAGMA foreign_keys = OFF') // must be outside a transaction
     db.exec('BEGIN')
     try {
       db.exec(sql)
+      if (fkOff) {
+        const problems = db.prepare('PRAGMA foreign_key_check').all()
+        if (problems.length) throw new Error(`migration ${id} left dangling foreign keys: ${JSON.stringify(problems.slice(0, 3))}`)
+      }
       db.prepare('INSERT INTO _migrations (id, applied_at) VALUES (?, ?)').run(id, new Date().toISOString())
       db.exec('COMMIT')
     } catch (e) {
       db.exec('ROLLBACK')
       throw e
+    } finally {
+      if (fkOff) db.exec('PRAGMA foreign_keys = ON')
     }
   })
 }

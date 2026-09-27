@@ -4,6 +4,7 @@ import { api, type Channel, type Settings } from '../api'
 import { useApi, useInterval } from '../hooks'
 import { useIsAdmin } from '../auth'
 import { fmtCount, fmtRelative } from '../lib/format'
+import { cls, Icon, Spinner } from '../ui'
 
 export default function Home() {
   const isAdmin = useIsAdmin()
@@ -33,64 +34,85 @@ export default function Home() {
   }
 
   return (
-    <div className="mx-auto max-w-screen-2xl px-4 py-6">
+    <div className="mx-auto max-w-screen-2xl px-4 py-8">
       {settings.data && !settings.data.youtubeApiKeySet && (
-        <div className="mb-6 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
-          No YouTube API key yet — indexing channels needs one.{' '}
-          <Link to="/settings" className="font-medium underline">
-            Add it in Settings
-          </Link>
-          .
+        <div className="mb-6 flex items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm">
+          <Icon name="key" className="shrink-0 text-amber-400" />
+          <span>
+            No YouTube API key yet — indexing channels needs one.{' '}
+            <Link to="/settings" className="font-medium underline">
+              Add it in Settings
+            </Link>
+            .
+          </span>
         </div>
       )}
 
-      {isAdmin && (
-        <form onSubmit={add} className="mb-8 flex gap-2">
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Add a channel — @PewDiePie, a channel URL, or a UC… id"
-            className="flex-1 rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 outline-none focus:border-accent"
-          />
-          <button disabled={busy} className="rounded-lg bg-accent px-4 py-2 font-medium text-white disabled:opacity-50">
-            {busy ? 'Adding…' : 'Add'}
+      <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Channels</h1>
+          <p className="text-sm text-neutral-500">Shared library. Series and watch history are yours.</p>
+        </div>
+        <form onSubmit={add} className="flex w-full gap-2 sm:w-auto">
+          <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="@PewDiePie, a channel URL, or UC… id" className={`w-full sm:w-80 ${cls.input}`} />
+          <button disabled={busy} className={cls.primary}>
+            {busy ? <Spinner /> : <Icon name="plus" />}
+            Add
           </button>
         </form>
-      )}
-      {error && <p className="-mt-6 mb-6 text-sm text-red-400">{error}</p>}
+      </div>
+      {error && <p className="-mt-4 mb-6 text-sm text-red-400">{error}</p>}
 
       {channels.data?.length === 0 && (
-        <p className="text-neutral-400">{isAdmin ? 'No channels yet. Add one above — the whole back catalogue gets indexed in the background.' : 'No channels yet — ask an admin to add some.'}</p>
+        <div className={`grid place-items-center p-12 text-center ${cls.card}`}>
+          <Icon name="film" size={36} className="mb-3 text-neutral-600" />
+          <p className="font-medium">No channels yet</p>
+          <p className="mt-1 max-w-sm text-sm text-neutral-500">Add a creator above. The whole back catalogue gets indexed in the background, then you choose how to sort it into series.</p>
+        </div>
       )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {channels.data?.map((c) => (
-          <Link key={c.id} to={`/c/${c.id}`} className="group overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-900 transition hover:border-neutral-600">
-            <div className="h-20 bg-neutral-800">
-              {c.banner_url && <img src={`${c.banner_url}=w1060`} alt="" className="size-full object-cover" />}
+        {channels.data?.map((c, i) => (
+          <Link
+            key={c.id}
+            to={`/c/${c.id}`}
+            className={`fade-up group overflow-hidden ${cls.card} transition hover:-translate-y-0.5 hover:border-white/20 hover:shadow-xl hover:shadow-black/40`}
+            style={{ animationDelay: `${i * 40}ms` }}
+          >
+            <div className="relative h-24 bg-neutral-900">
+              {c.banner_url && <img src={`${c.banner_url}=w1060`} alt="" className="size-full object-cover opacity-80 transition group-hover:opacity-100" />}
+              <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 to-transparent" />
             </div>
-            <div className="-mt-8 flex items-end gap-3 px-4">
-              <img src={c.thumbnail_url ?? ''} alt="" className="size-16 rounded-full border-4 border-neutral-900 bg-neutral-800" />
+            <div className="-mt-9 flex items-end gap-3 px-4">
+              <img src={c.thumbnail_url ?? ''} alt="" className="size-[68px] rounded-full bg-neutral-800 ring-4 ring-neutral-950" />
               <div className="min-w-0 pb-1">
                 <h2 className="truncate font-semibold">{c.title}</h2>
-                <p className="truncate text-xs text-neutral-400">{c.handle}</p>
+                <p className="truncate text-xs text-neutral-500">{c.handle}</p>
               </div>
             </div>
-            <div className="flex items-center justify-between px-4 py-3 text-xs text-neutral-400">
-              <span>
-                {fmtCount(c.indexed_count ?? 0)} videos · {c.series_count ?? 0} series
-              </span>
-              {c.sync.state === 'running' ? (
-                <span className="text-accent">
-                  {c.sync.phase === 'organising' ? 'Organising…' : `Indexing ${c.sync.fetched}/${c.sync.total || '?'}`}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 pb-4 pt-3 text-xs text-neutral-400">
+              <span>{fmtCount(c.indexed_count ?? 0)} videos</span>
+              <span>{c.series_count ?? 0} series</span>
+              {(c.downloaded_count ?? 0) > 0 && (
+                <span className="inline-flex items-center gap-1 text-emerald-400">
+                  <Icon name="server" size={12} /> {c.downloaded_count}
                 </span>
-              ) : c.sync.state === 'error' ? (
-                <span className="text-red-400" title={c.sync.error}>
-                  Sync failed
-                </span>
-              ) : (
-                <span>{c.last_synced_at ? `Synced ${fmtRelative(c.last_synced_at)}` : 'Not synced'}</span>
               )}
+              <span className="ml-auto">
+                {c.sync.state === 'running' ? (
+                  <span className="inline-flex items-center gap-1.5 text-accent">
+                    <Spinner /> {c.sync.phase === 'organising' ? 'Organising' : `${c.sync.fetched}/${c.sync.total || '?'}`}
+                  </span>
+                ) : c.sync.state === 'error' ? (
+                  <span className="text-red-400" title={c.sync.error}>
+                    Sync failed
+                  </span>
+                ) : !c.organised ? (
+                  <span className="rounded-full bg-accent/15 px-2 py-0.5 font-medium text-accent">Set up series</span>
+                ) : (
+                  <span>{c.last_synced_at ? fmtRelative(c.last_synced_at) : 'Not synced'}</span>
+                )}
+              </span>
             </div>
           </Link>
         ))}

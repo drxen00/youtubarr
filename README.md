@@ -4,23 +4,31 @@ Self-hosted YouTube browser for binge-watching a creator's back catalogue. Point
 upload, sorts them into **series** (Amnesia, Happy Wheels, Fridays with PewDiePie, …) with rule-based matching, and gives
 you a player built for walking a series episode by episode — or scrubbing through a decade of uploads by date.
 
-Built for Unraid + a Cloudflare tunnel, so it's one container, mobile-first, and optionally password-protected.
+Built for Unraid + a Cloudflare tunnel, so it's one container, mobile-first, and multi-user.
 
 ## What it does
 
 - **Index a whole channel** via the YouTube Data API (≈200 quota units for 5,000 videos; refreshes cost 2–3).
-- **Series from title rules.** Regex rules per series, editable in the UI with live match preview; higher priority wins.
-  Ships with a starter ruleset for PewDiePie that's applied automatically. Manual per-video overrides stick through re-syncs.
-- **Automatic organising for any channel.** On first index, the creator's own playlists become series, and recurring
-  title patterns (`Minecraft Hardcore #12`, `GTA V - Part 3`) are detected and turned into series with editable rules.
-  An *Organise* panel on the channel page lets you review lower-confidence suggestions and create them in one click.
+- **Your own series, per person.** Everyone sorts the shared catalogue their own way: regex title rules with a live match
+  preview, the creator's playlists, auto-detected title patterns (`Minecraft Hardcore #12`, `GTA V - Part 3`), a bundled
+  starter ruleset (PewDiePie ships with one), or a one-click copy of a friend's setup. Manual picks survive re-syncs.
 - **Player built around series.** Prev/next episode, older/newer upload, episode `12/87`, resume where you left off,
-  autoplay next, speed control, and keyboard shortcuts. YouTube embed by default; downloaded videos play natively.
+  autoplay next, speed control, and keyboard shortcuts.
 - **Timeline scrubber.** A per-month upload histogram you drag to land anywhere in the channel's history and browse forward.
-- **Opt-in downloads.** Any video or a whole series can be pulled with `yt-dlp` into `/media` and served with range
-  requests for seeking. Nothing is downloaded unless you ask.
-- **Accounts for you and your friends.** Username/password logins with per-user watch history. Admins manage channels,
-  series, downloads and users; regular users browse and watch. Login is always required, so it's safe behind a tunnel.
+- **Shared downloads.** Grab a video, a whole series, or a whole playlist with `yt-dlp`. Files are shared: once a video is
+  on the server, everyone streams it from Unraid (with seeking); everything else streams from YouTube as normal.
+- **Accounts for you and your friends.** Everyone can add channels, sync, organise their own series and queue downloads.
+  Admins additionally manage users and the API key, and can remove channels or downloaded files. Login is always
+  required, so it's safe behind a tunnel.
+
+| | user | admin |
+|---|:-:|:-:|
+| Browse, watch, own watch history | ✓ | ✓ |
+| Add & sync channels | ✓ | ✓ |
+| Own series, rules, organising | ✓ | ✓ |
+| Queue downloads (shared) | ✓ | ✓ |
+| Delete downloaded files, remove channels | | ✓ |
+| Users, API key, settings | | ✓ |
 
 ## Run it (Unraid / Docker)
 

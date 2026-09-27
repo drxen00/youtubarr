@@ -50,11 +50,11 @@ function recordFail(ip: string) {
 }
 
 /**
- * Non-admins are read-only except for the routes listed here. Some GETs leak config or are
- * admin tooling, so those are denied too.
+ * Everyone signed in can browse, watch, add channels, sync, organise their own series and queue
+ * downloads. Only these are reserved for admins: user management, the API key / settings, removing a
+ * shared channel, and deleting shared downloaded files.
  */
-const USER_WRITE_ALLOW = [/^PUT \/api\/videos\/[^/]+\/progress$/, /^POST \/api\/auth\/logout$/, /^PUT \/api\/auth\/password$/]
-const USER_READ_DENY = [/^GET \/api\/settings$/, /^GET \/api\/downloads$/, /^GET \/api\/users/, /^GET \/api\/channels\/[^/]+\/organise\//, /^GET \/api\/channels\/[^/]+\/series\/preview$/]
+const ADMIN_ONLY = [/^\w+ \/api\/users/, /^\w+ \/api\/settings$/, /^DELETE \/api\/channels\/[^/]+$/, /^DELETE \/api\/videos\/[^/]+\/download$/]
 
 function bad(reply: FastifyReply, code: number, msg: string) {
   return reply.code(code).send({ error: msg })
@@ -70,11 +70,7 @@ export function registerAuth(app: FastifyInstance) {
     req.user = userForSession(req.cookies[COOKIE])
     if (url.startsWith('/api/auth/') || url === '/api/health') return
     if (!req.user) return bad(reply, 401, 'Unauthorized')
-    if (req.user.role !== 'admin') {
-      const key = `${req.method} ${url}`
-      const isRead = req.method === 'GET' || req.method === 'HEAD'
-      if (isRead ? USER_READ_DENY.some((re) => re.test(key)) : !USER_WRITE_ALLOW.some((re) => re.test(key))) return bad(reply, 403, 'Admins only')
-    }
+    if (req.user.role !== 'admin' && ADMIN_ONLY.some((re) => re.test(`${req.method} ${url}`))) return bad(reply, 403, 'Admins only')
   })
 
   app.get('/api/auth/status', async (req) => ({

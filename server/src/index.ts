@@ -16,17 +16,17 @@ await app.register(fastifyCookie)
 registerAuth(app)
 registerRoutes(app)
 
-// Downloaded files, with Range support so the native player can seek.
+// Downloaded files, with Range support so the native player can seek. This registration owns the
+// reply.sendFile decorator (only one @fastify/static instance may add it); `serve: false` means it
+// exposes nothing by itself — files are only reachable through the lookup below.
 await app.register(fastifyStatic, {
   root: config.mediaDir,
-  prefix: '/media/files/',
-  decorateReply: false,
   serve: false,
 })
 app.get<{ Params: { id: string } }>('/media/:id', async (req, reply) => {
   const rel = downloads.localFile(req.params.id)
   if (!rel) return reply.code(404).send({ error: 'not downloaded' })
-  return reply.sendFile(rel, config.mediaDir, { acceptRanges: true })
+  return reply.sendFile(rel.split(path.sep).join('/'), config.mediaDir, { acceptRanges: true, cacheControl: false })
 })
 
 // SPA

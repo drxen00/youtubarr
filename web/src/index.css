@@ -2,7 +2,7 @@
 
 @theme {
   --color-accent: #ef4444;
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
 }
 
 html, body, #root {
@@ -10,11 +10,18 @@ html, body, #root {
 }
 
 body {
-  background: #0a0a0a;
+  background: #09090b;
+  background-image:
+    radial-gradient(1200px 600px at 10% -10%, rgba(239, 68, 68, 0.10), transparent 60%),
+    radial-gradient(900px 500px at 100% 0%, rgba(120, 90, 255, 0.07), transparent 60%);
+  background-attachment: fixed;
   color: #f5f5f5;
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior-y: none;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
 }
+
+::selection { background: rgba(239, 68, 68, 0.35); }
 
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { scrollbar-width: none; }
@@ -27,3 +34,25 @@ body {
 }
 
 input[type="range"] { accent-color: var(--color-accent); }
+input[type="color"] { inline-size: 28px; block-size: 28px; padding: 0; border: 0; background: none; border-radius: 6px; }
+
+/* Thin, dark scrollbars where we do show them. */
+.scroll-thin { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.15) transparent; }
+.scroll-thin::-webkit-scrollbar { width: 6px; }
+.scroll-thin::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.fade-up { animation: fade-up 0.35s ease-out both; }
+
+kbd {
+  font-family: inherit;
+  font-size: 0.7rem;
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.05);
+  color: #d4d4d4;
+}

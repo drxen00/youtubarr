@@ -1,5 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { api, type User } from '../api'
+import { Logo } from '../App'
+import { cls } from '../ui'
 
 export default function Login({ mode, onSuccess }: { mode: 'login' | 'setup'; onSuccess: (user: User) => void }) {
   const [username, setUsername] = useState('')
@@ -24,29 +26,33 @@ export default function Login({ mode, onSuccess }: { mode: 'login' | 'setup'; on
     }
   }
 
-  const field = 'w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 outline-none focus:border-accent'
-
   return (
     <div className="grid min-h-dvh place-items-center p-4">
-      <form onSubmit={submit} className="w-full max-w-sm space-y-4 rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
-        <div>
-          <h1 className="text-lg font-semibold">youtubarr</h1>
-          {setup && <p className="mt-1 text-sm text-neutral-400">First run — create the admin account. You can add friends from Settings afterwards.</p>}
+      <form onSubmit={submit} className={`fade-up w-full max-w-sm space-y-5 p-7 ${cls.card} shadow-2xl shadow-black/60`}>
+        <div className="flex items-center gap-3">
+          <Logo size={36} />
+          <div>
+            <h1 className="text-lg font-semibold leading-tight">youtubarr</h1>
+            <p className="text-xs text-neutral-500">{setup ? 'First run — create the admin account' : 'Sign in to continue'}</p>
+          </div>
         </div>
-        <input autoFocus autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Username" className={field} />
-        <input
-          type="password"
-          autoComplete={setup ? 'new-password' : 'current-password'}
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder={setup ? 'Password (8+ characters)' : 'Password'}
-          className={field}
-        />
-        {setup && <input type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="Confirm password" className={field} />}
+        <div className="space-y-3">
+          <input autoFocus autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Username" className={`w-full ${cls.input}`} />
+          <input
+            type="password"
+            autoComplete={setup ? 'new-password' : 'current-password'}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder={setup ? 'Password (8+ characters)' : 'Password'}
+            className={`w-full ${cls.input}`}
+          />
+          {setup && <input type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="Confirm password" className={`w-full ${cls.input}`} />}
+        </div>
         {error && <p className="text-sm text-red-400">{error}</p>}
-        <button disabled={busy} className="w-full rounded-lg bg-accent py-2 font-medium text-white disabled:opacity-50">
+        <button disabled={busy} className={`w-full py-2.5 ${cls.primary}`}>
           {busy ? '…' : setup ? 'Create admin account' : 'Sign in'}
         </button>
+        {setup && <p className="text-center text-xs text-neutral-500">You'll be able to add friends as users from Settings.</p>}
       </form>
     </div>
   )

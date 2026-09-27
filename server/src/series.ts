@@ -38,41 +38,64 @@ export function matchSeries(title: string, rules: CompiledRule[]): number | null
   return null
 }
 
-export function loadRules(channelId: string): CompiledRule[] {
+export function loadRules(channelId: string, userId: number): CompiledRule[] {
   const rows = db
     .prepare(
       `SELECT r.series_id AS seriesId, s.priority AS seriesPriority, r.pattern, r.flags
        FROM series_rules r JOIN series s ON s.id = r.series_id
-       WHERE s.channel_id = ? AND r.enabled = 1
+       WHERE s.channel_id = ? AND s.user_id = ? AND r.enabled = 1
        ORDER BY r.id`,
     )
-    .all(channelId) as unknown as RuleDef[]
+    .all(channelId, userId) as unknown as RuleDef[]
   return compileRules(rows)
 }
 
-/** Re-runs rules over every video the rules engine owns (not manual picks, not playlist picks). */
-export function applyRules(channelId: string): { assigned: number; cleared: number; unchanged: number } {
-  const rules = loadRules(channelId)
+/**
+ * Re-runs one user's rules over the channel. Only touches assignments the rules engine owns —
+ * playlist and manual picks stay put.
+ */
+export function applyRules(channelId: string, userId: number): { assigned: number; cleared: number; unchanged: number } {
+  const rules = loadRules(channelId, userId)
   const videos = db
-    .prepare(`SELECT id, title, series_id FROM videos WHERE channel_id = ? AND (series_source IS NULL OR series_source = 'rule')`)
-    .all(channelId) as { id: string; title: string; series_id: number | null }[]
-  const update = db.prepare(`UPDATE videos SET series_id = ?, series_source = CASE WHEN ? IS NULL THEN NULL ELSE 'rule' END WHERE id = ?`)
+    .prepare(
+      `SELECT v.id, v.title, vs.series_id, vs.source FROM videos v
+       LEFT JOIN video_series vs ON vs.video_id = v.id AND vs.user_id = ?
+       WHERE v.channel_id = ?`,
+    )
+    .all(userId, channelId) as { id: string; title: string; series_id: number | null; source: string | null }[]
+  const upsert = db.prepare(
+    `INSERT INTO video_series (user_id, video_id, series_id, source) VALUES (?, ?, ?, 'rule')
+     ON CONFLICT(user_id, video_id) DO UPDATE SET series_id = excluded.series_id, source = 'rule'`,
+  )
+  const remove = db.prepare('DELETE FROM video_series WHERE user_id = ? AND video_id = ?')
   let assigned = 0
   let cleared = 0
   let unchanged = 0
   transaction(() => {
     for (const v of videos) {
+      if (v.source && v.source !== 'rule') {
+        unchanged++
+        continue
+      }
       const next = matchSeries(v.title, rules)
       if (next === v.series_id) {
         unchanged++
         continue
       }
-      update.run(next, next, v.id)
-      if (next === null) cleared++
-      else assigned++
+      if (next === null) {
+        remove.run(userId, v.id)
+        cleared++
+      } else {
+        upsert.run(userId, v.id, next)
+        assigned++
+      }
     }
   })
   return { assigned, cleared, unchanged }
+}
+
+export function seriesOwner(seriesId: number): { user_id: number | null; channel_id: string } | undefined {
+  return db.prepare('SELECT user_id, channel_id FROM series WHERE id = ?').get(seriesId) as { user_id: number | null; channel_id: string } | undefined
 }
 
 // ---- seeds ------------------------------------------------------------------
@@ -108,12 +131,12 @@ export function findSeedFor(channelId: string, handle: string | null): string | 
   return null
 }
 
-/** Inserts seed series + rules for a channel. Existing series with the same name get their rules appended. */
-export function importSeed(channelId: string, file: string): { series: number; rules: number } {
+/** Inserts seed series + rules for one user. Existing series with the same name get their rules appended. */
+export function importSeed(channelId: string, userId: number, file: string): { series: number; rules: number } {
   const seed = JSON.parse(fs.readFileSync(path.join(config.seedsDir, path.basename(file)), 'utf8')) as SeedFile
   const insertSeries = db.prepare(
-    `INSERT INTO series (channel_id, name, color, priority, source) VALUES (?, ?, ?, ?, 'seed')
-     ON CONFLICT(channel_id, name) DO UPDATE SET color = COALESCE(series.color, excluded.color)
+    `INSERT INTO series (user_id, channel_id, name, color, priority, source) VALUES (?, ?, ?, ?, ?, 'seed')
+     ON CONFLICT(user_id, channel_id, name) DO UPDATE SET color = COALESCE(series.color, excluded.color)
      RETURNING id`,
   )
   const insertRule = db.prepare('INSERT INTO series_rules (series_id, pattern, flags) VALUES (?, ?, ?)')
@@ -122,7 +145,7 @@ export function importSeed(channelId: string, file: string): { series: number; r
   let rules = 0
   transaction(() => {
     for (const s of seed.series) {
-      const { id } = insertSeries.get(channelId, s.name, s.color ?? null, s.priority ?? 0) as { id: number }
+      const { id } = insertSeries.get(userId, channelId, s.name, s.color ?? null, s.priority ?? 0) as { id: number }
       series++
       for (const p of s.patterns) {
         const pattern = typeof p === 'string' ? p : p.pattern

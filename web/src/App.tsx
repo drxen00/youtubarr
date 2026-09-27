@@ -3,8 +3,17 @@ import { Link, Outlet, useLocation } from 'react-router'
 import { api, UNAUTHORIZED_EVENT, type AuthStatus, type User } from './api'
 import { UserContext } from './auth'
 import Login from './pages/Login'
+import { cls, Icon } from './ui'
 
 type State = { kind: 'checking' } | { kind: 'setup' } | { kind: 'login' } | { kind: 'ok'; user: User }
+
+export function Logo({ size = 24 }: { size?: number }) {
+  return (
+    <span className="grid place-items-center rounded-lg bg-accent text-white shadow-[0_6px_16px_-6px_rgba(239,68,68,0.8)]" style={{ width: size, height: size }}>
+      <Icon name="play" size={size * 0.55} />
+    </span>
+  )
+}
 
 export default function App() {
   const [state, setState] = useState<State>({ kind: 'checking' })
@@ -28,22 +37,21 @@ export default function App() {
 
   return (
     <UserContext.Provider value={user}>
-      <div className="min-h-dvh flex flex-col">
+      <div className="flex min-h-dvh flex-col">
         {!isWatch && (
-          <header className="sticky top-0 z-30 border-b border-neutral-800 bg-neutral-950/90 backdrop-blur">
-            <div className="mx-auto flex h-12 max-w-screen-2xl items-center gap-4 px-4">
-              <Link to="/" className="flex items-center gap-2 font-semibold tracking-tight">
-                <span className="grid size-6 place-items-center rounded-md bg-accent text-white">
-                  <svg viewBox="0 0 24 24" className="size-3.5 fill-current"><path d="M8 5v14l11-7z" /></svg>
-                </span>
-                youtubarr
+          <header className="sticky top-0 z-30 border-b border-white/[0.06] bg-neutral-950/70 backdrop-blur-xl">
+            <div className="mx-auto flex h-14 max-w-screen-2xl items-center gap-4 px-4">
+              <Link to="/" className="flex items-center gap-2.5 font-semibold tracking-tight">
+                <Logo />
+                <span>youtubarr</span>
               </Link>
-              <nav className="ml-auto flex items-center gap-3 text-sm text-neutral-400">
-                <Link to="/settings" className="hover:text-white" title={user.role === 'admin' ? 'Settings' : 'Your account'}>
-                  {user.username}
+              <nav className="ml-auto flex items-center gap-1">
+                <Link to="/settings" className={cls.ghost} title={user.role === 'admin' ? 'Settings' : 'Your account'}>
+                  <Icon name={user.role === 'admin' ? 'settings' : 'user'} />
+                  <span className="hidden sm:inline">{user.username}</span>
                 </Link>
-                <button onClick={logout} className="hover:text-white">
-                  Log out
+                <button onClick={logout} className={cls.ghost} title="Log out">
+                  <Icon name="logout" />
                 </button>
               </nav>
             </div>

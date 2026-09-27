@@ -1,12 +1,12 @@
 import { db, getSetting, transaction } from './db.js'
 import { config } from './config.js'
 import { fetchChannel, fetchVideos, playlistVideoIds, YouTubeApiError } from './youtube.js'
-import { applyRules, findSeedFor, importSeed } from './series.js'
-import { autoOrganise } from './organise.js'
+import { applyRules } from './series.js'
+import { autoOrganise, isOrganised } from './organise.js'
 
 export function apiKey(): string {
   const key = getSetting('youtube_api_key') || config.youtubeApiKey
-  if (!key) throw new YouTubeApiError('No YouTube API key configured. Add one in Settings.', 400, 'noApiKey')
+  if (!key) throw new YouTubeApiError('No YouTube API key configured. An admin can add one in Settings.', 400, 'noApiKey')
   return key
 }
 
@@ -36,10 +36,9 @@ const upsertVideo = db.prepare(`
     view_count = excluded.view_count, like_count = excluded.like_count, unavailable = 0, indexed_at = excluded.indexed_at
 `)
 
-/** Adds a channel (metadata only) and kicks off a full sync in the background. */
-export async function addChannel(input: string) {
+/** Adds a channel (metadata only) and kicks off a full sync; the adding user gets auto-organised afterwards. */
+export async function addChannel(input: string, userId: number) {
   const info = await fetchChannel(apiKey(), input)
-  const exists = db.prepare('SELECT 1 FROM channels WHERE id = ?').get(info.id)
   db.prepare(
     `INSERT INTO channels (id, title, handle, description, thumbnail_url, banner_url, uploads_playlist_id, video_count, subscriber_count)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -47,21 +46,15 @@ export async function addChannel(input: string) {
        thumbnail_url = excluded.thumbnail_url, banner_url = excluded.banner_url, uploads_playlist_id = excluded.uploads_playlist_id,
        video_count = excluded.video_count, subscriber_count = excluded.subscriber_count`,
   ).run(info.id, info.title, info.handle, info.description, info.thumbnailUrl, info.bannerUrl, info.uploadsPlaylistId, info.videoCount, info.subscriberCount)
-
-  let seeded: string | null = null
-  if (!exists) {
-    seeded = findSeedFor(info.id, info.handle)
-    if (seeded) importSeed(info.id, seeded)
-  }
-  void syncChannel(info.id, { full: true })
-  return { id: info.id, seeded }
+  void syncChannel(info.id, { full: true, organiseFor: userId })
+  return { id: info.id }
 }
 
 /**
  * Pulls the uploads playlist. Incremental mode stops at the first page where every id is already known
  * (uploads are newest-first), which keeps routine refreshes to a couple of quota units.
  */
-export async function syncChannel(channelId: string, opts: { full?: boolean } = {}): Promise<void> {
+export async function syncChannel(channelId: string, opts: { full?: boolean; organiseFor?: number } = {}): Promise<void> {
   const current = status.get(channelId)
   if (current?.state === 'running') return
   const ch = db.prepare('SELECT uploads_playlist_id, video_count FROM channels WHERE id = ?').get(channelId) as
@@ -101,17 +94,16 @@ export async function syncChannel(channelId: string, opts: { full?: boolean } = 
       }
     }
 
-    applyRules(channelId)
+    // New uploads need sorting for everyone who has rules on this channel.
+    const owners = db.prepare('SELECT DISTINCT user_id FROM series WHERE channel_id = ? AND user_id IS NOT NULL').all(channelId) as { user_id: number }[]
+    for (const o of owners) applyRules(channelId, o.user_id)
+
     db.prepare('UPDATE channels SET last_synced_at = ?, video_count = (SELECT COUNT(*) FROM videos WHERE channel_id = ? AND unavailable = 0) WHERE id = ?')
       .run(new Date().toISOString(), channelId, channelId)
 
-    // First full sync of a channel with no bundled ruleset: pull its playlists and detect series from titles.
-    const ch2 = db.prepare('SELECT auto_organised, (SELECT COUNT(*) FROM series WHERE channel_id = channels.id) AS n FROM channels WHERE id = ?').get(channelId) as
-      | { auto_organised: number; n: number }
-      | undefined
-    if (opts.full && ch2 && !ch2.auto_organised && ch2.n === 0) {
+    if (opts.organiseFor && !isOrganised(opts.organiseFor, channelId)) {
       st.phase = 'organising'
-      await autoOrganise(key, channelId)
+      await autoOrganise(key, channelId, opts.organiseFor)
     }
     st.state = 'idle'
   } catch (e) {
