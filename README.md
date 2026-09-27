@@ -19,7 +19,8 @@ Built for Unraid + a Cloudflare tunnel, so it's one container, mobile-first, and
 - **Timeline scrubber.** A per-month upload histogram you drag to land anywhere in the channel's history and browse forward.
 - **Opt-in downloads.** Any video or a whole series can be pulled with `yt-dlp` into `/media` and served with range
   requests for seeking. Nothing is downloaded unless you ask.
-- **Single password** (`APP_PASSWORD`) for when the tunnel is public; or put Cloudflare Access in front instead.
+- **Accounts for you and your friends.** Username/password logins with per-user watch history. Admins manage channels,
+  series, downloads and users; regular users browse and watch. Login is always required, so it's safe behind a tunnel.
 
 ## Run it (Unraid / Docker)
 
@@ -42,13 +43,15 @@ services:
     ports: ["8790:8790"]
     environment:
       YOUTUBE_API_KEY: ""     # or paste it into Settings once running
-      APP_PASSWORD: ""        # strongly recommended if exposed
+      APP_PASSWORD: ""        # optional: seeds the `admin` account's password on first start
     volumes:
       - /mnt/user/appdata/youtubarr:/data     # SQLite db
       - /mnt/user/media/youtubarr:/media      # downloads (optional, can be big)
 ```
 
-Then open `http://<unraid-ip>:8790`, add your API key in **Settings**, and add `@PewDiePie` on the home page.
+Then open `http://<unraid-ip>:8790`. The first visit asks you to create the admin account (unless `APP_PASSWORD` was
+set, in which case log in as `admin` with it). Add your API key in **Settings**, add `@PewDiePie` on the home page, and
+invite friends from **Settings → Users**.
 
 ### YouTube API key
 
@@ -59,8 +62,8 @@ Then open `http://<unraid-ip>:8790`, add your API key in **Settings**, and add `
 ### Cloudflare tunnel
 
 Add a public hostname in Zero Trust pointing at `http://youtubarr:8790` (same Docker network) or `http://<unraid-ip>:8790`.
-Set `APP_PASSWORD`, or add a Cloudflare Access policy to the hostname. The server trusts `X-Forwarded-*` headers so
-cookies are marked `Secure` behind the tunnel.
+Logins are rate-limited per IP and the server trusts `X-Forwarded-*` headers, so cookies are marked `Secure` behind the
+tunnel. Adding a Cloudflare Access policy on top is optional belt-and-braces.
 
 ## Development
 

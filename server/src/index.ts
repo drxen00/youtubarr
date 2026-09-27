@@ -7,9 +7,11 @@ import { config } from './config.js'
 import { registerAuth } from './auth.js'
 import { registerRoutes } from './routes.js'
 import * as downloads from './downloads.js'
+import { bootstrapUsers } from './users.js'
 
 const app = Fastify({ logger: { level: config.isProd ? 'info' : 'debug' }, trustProxy: true })
 
+bootstrapUsers((m) => app.log.warn(m))
 await app.register(fastifyCookie)
 registerAuth(app)
 registerRoutes(app)

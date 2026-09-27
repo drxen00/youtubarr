@@ -5,7 +5,7 @@ import { addChannel, apiKey, syncChannel, syncStatus } from './indexer.js'
 import { autoOrganise, createFromSuggestions, importPlaylists, suggestForChannel } from './organise.js'
 import { applyRules, findSeedFor, importSeed, listSeeds } from './series.js'
 import * as downloads from './downloads.js'
-import { authRequired } from './auth.js'
+import { requireUser } from './auth.js'
 import { YouTubeApiError } from './youtube.js'
 
 type VideoRow = {
@@ -27,8 +27,9 @@ const VIDEO_COLS = `v.id, v.channel_id, v.title, v.published_at, v.duration_seco
   s.name AS series_name, s.color AS series_color,
   p.position_seconds AS progress_position, p.duration_seconds AS progress_duration, p.completed AS progress_completed,
   d.status AS download_status, d.progress AS download_progress`
-const VIDEO_JOINS = `LEFT JOIN series s ON s.id = v.series_id
-  LEFT JOIN watch_progress p ON p.video_id = v.id
+/** Progress is per user; `userId` is a server-issued integer, so inlining it is safe. */
+const joins = (userId: number) => `LEFT JOIN series s ON s.id = v.series_id
+  LEFT JOIN watch_progress p ON p.video_id = v.id AND p.user_id = ${Number(userId)}
   LEFT JOIN downloads d ON d.video_id = v.id`
 
 function bad(reply: { code: (n: number) => { send: (b: unknown) => unknown } }, msg: string, code = 400) {
@@ -42,7 +43,6 @@ export function registerRoutes(app: FastifyInstance) {
   app.get('/api/settings', async () => ({
     youtubeApiKeySet: !!(getSetting('youtube_api_key') || config.youtubeApiKey),
     youtubeApiKeyFromEnv: !getSetting('youtube_api_key') && !!config.youtubeApiKey,
-    passwordRequired: authRequired(),
     ytDlpVersion: downloads.ytDlpAvailable(),
     mediaDir: config.mediaDir,
     dataDir: config.dataDir,
@@ -153,7 +153,7 @@ export function registerRoutes(app: FastifyInstance) {
     const offset = Math.max(Number(q.offset) || 0, 0)
     const total = (db.prepare(`SELECT COUNT(*) AS n FROM videos v WHERE ${where.join(' AND ')}`).get(...params) as { n: number }).n
     const items = db
-      .prepare(`SELECT ${VIDEO_COLS} FROM videos v ${VIDEO_JOINS} WHERE ${where.join(' AND ')} ORDER BY ${sort}, v.id LIMIT ? OFFSET ?`)
+      .prepare(`SELECT ${VIDEO_COLS} FROM videos v ${joins(requireUser(req).id)} WHERE ${where.join(' AND ')} ORDER BY ${sort}, v.id LIMIT ? OFFSET ?`)
       .all(...params, limit, offset)
     return { total, limit, offset, items }
   })
@@ -161,8 +161,8 @@ export function registerRoutes(app: FastifyInstance) {
   app.get<{ Params: { id: string } }>('/api/channels/:id/continue', async (req) =>
     db
       .prepare(
-        `SELECT ${VIDEO_COLS} FROM videos v ${VIDEO_JOINS}
-         WHERE v.channel_id = ? AND p.completed = 0 AND p.position_seconds > 30
+        `SELECT ${VIDEO_COLS} FROM videos v ${joins(requireUser(req).id)}
+         WHERE v.channel_id = ? AND v.unavailable = 0 AND p.completed = 0 AND p.position_seconds > 30
          ORDER BY p.updated_at DESC LIMIT 12`,
       )
       .all(req.params.id),
@@ -175,11 +175,11 @@ export function registerRoutes(app: FastifyInstance) {
         `SELECT s.*, COUNT(v.id) AS video_count, MIN(v.published_at) AS first_at, MAX(v.published_at) AS last_at,
                 (SELECT thumbnail_url FROM videos WHERE series_id = s.id AND unavailable = 0 ORDER BY published_at LIMIT 1) AS thumbnail_url,
                 (SELECT COUNT(*) FROM series_rules r WHERE r.series_id = s.id) AS rule_count,
-                (SELECT COUNT(*) FROM videos v2 JOIN watch_progress p ON p.video_id = v2.id WHERE v2.series_id = s.id AND p.completed = 1) AS watched_count
+                (SELECT COUNT(*) FROM videos v2 JOIN watch_progress p ON p.video_id = v2.id AND p.user_id = ? WHERE v2.series_id = s.id AND p.completed = 1) AS watched_count
          FROM series s LEFT JOIN videos v ON v.series_id = s.id AND v.unavailable = 0
          WHERE s.channel_id = ? GROUP BY s.id ORDER BY video_count DESC, s.name`,
       )
-      .all(req.params.id),
+      .all(requireUser(req).id, req.params.id),
   )
 
   app.post<{ Params: { id: string }; Body: { name?: string; color?: string; priority?: number; patterns?: string[] } }>(
@@ -243,7 +243,7 @@ export function registerRoutes(app: FastifyInstance) {
     if (!s) return bad(reply, 'not found', 404)
     const rules = db.prepare('SELECT * FROM series_rules WHERE series_id = ? ORDER BY id').all(s.id as number)
     const videos = db
-      .prepare(`SELECT ${VIDEO_COLS} FROM videos v ${VIDEO_JOINS} WHERE v.series_id = ? AND v.unavailable = 0 ORDER BY v.published_at, v.id`)
+      .prepare(`SELECT ${VIDEO_COLS} FROM videos v ${joins(requireUser(req).id)} WHERE v.series_id = ? AND v.unavailable = 0 ORDER BY v.published_at, v.id`)
       .all(s.id as number)
     return { ...s, rules, videos }
   })
@@ -305,14 +305,15 @@ export function registerRoutes(app: FastifyInstance) {
 
   // ---- videos ---------------------------------------------------------------
   app.get<{ Params: { id: string } }>('/api/videos/:id', async (req, reply) => {
-    const v = db.prepare(`SELECT ${VIDEO_COLS}, v.description, v.like_count FROM videos v ${VIDEO_JOINS} WHERE v.id = ?`).get(req.params.id) as
+    const J = joins(requireUser(req).id)
+    const v = db.prepare(`SELECT ${VIDEO_COLS}, v.description, v.like_count FROM videos v ${J} WHERE v.id = ?`).get(req.params.id) as
       | (VideoRow & Record<string, unknown>)
       | undefined
     if (!v) return bad(reply, 'not found', 404)
 
     const neighbor = (where: string, order: 'ASC' | 'DESC', params: (string | number)[]) =>
       db
-        .prepare(`SELECT ${VIDEO_COLS} FROM videos v ${VIDEO_JOINS} WHERE v.unavailable = 0 AND ${where} ORDER BY v.published_at ${order}, v.id ${order} LIMIT 1`)
+        .prepare(`SELECT ${VIDEO_COLS} FROM videos v ${J} WHERE v.unavailable = 0 AND ${where} ORDER BY v.published_at ${order}, v.id ${order} LIMIT 1`)
         .get(...params) ?? null
 
     // "Newer/older" walks the whole channel; "next/prev" walks the series.
@@ -358,10 +359,10 @@ export function registerRoutes(app: FastifyInstance) {
     const duration = Math.max(0, Number(b.duration) || 0)
     const completed = b.completed ?? (duration > 0 && position / duration > 0.95)
     db.prepare(
-      `INSERT INTO watch_progress (video_id, position_seconds, duration_seconds, completed, updated_at) VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT(video_id) DO UPDATE SET position_seconds = excluded.position_seconds, duration_seconds = excluded.duration_seconds,
+      `INSERT INTO watch_progress (user_id, video_id, position_seconds, duration_seconds, completed, updated_at) VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(user_id, video_id) DO UPDATE SET position_seconds = excluded.position_seconds, duration_seconds = excluded.duration_seconds,
          completed = excluded.completed, updated_at = excluded.updated_at`,
-    ).run(req.params.id, position, duration, completed ? 1 : 0, new Date().toISOString())
+    ).run(requireUser(req).id, req.params.id, position, duration, completed ? 1 : 0, new Date().toISOString())
     return { ok: true }
   })
 

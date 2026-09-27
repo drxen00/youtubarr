@@ -35,6 +35,20 @@ export async function api<T>(path: string, init?: RequestInit & { json?: unknown
 
 // ---- types (mirror server/src/routes.ts) ------------------------------------
 
+export interface User {
+  id: number
+  username: string
+  role: 'admin' | 'user'
+  created_at: string
+  last_login_at: string | null
+}
+
+export interface AuthStatus {
+  setupRequired: boolean
+  authenticated: boolean
+  user: User | null
+}
+
 export interface SyncStatus {
   state: 'idle' | 'running' | 'error'
   phase?: 'fetching' | 'organising'
@@ -140,7 +154,6 @@ export interface Page<T> {
 export interface Settings {
   youtubeApiKeySet: boolean
   youtubeApiKeyFromEnv: boolean
-  passwordRequired: boolean
   ytDlpVersion: string | null
   mediaDir: string
   dataDir: string

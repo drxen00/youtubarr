@@ -5,12 +5,14 @@ import { useApi, useInterval } from '../hooks'
 import Timeline, { type Bucket } from '../components/Timeline'
 import VideoCard from '../components/VideoCard'
 import Organise from '../components/Organise'
+import { useIsAdmin } from '../auth'
 import { fmtCount, fmtRelative } from '../lib/format'
 
 const PAGE = 60
 
 export default function ChannelPage() {
   const { channelId = '' } = useParams()
+  const isAdmin = useIsAdmin()
   const [params, setParams] = useSearchParams()
   const series = params.get('series') ?? ''
   const q = params.get('q') ?? ''
@@ -88,7 +90,7 @@ export default function ChannelPage() {
               )}
             </p>
           </div>
-          <div className="flex gap-2 text-sm">
+          {isAdmin && <div className="flex gap-2 text-sm">
             <button
               disabled={syncing}
               onClick={() => api(`/api/channels/${channelId}/sync`, { method: 'POST', json: {} }).then(channel.reload)}
@@ -103,7 +105,7 @@ export default function ChannelPage() {
             >
               Full resync
             </button>
-          </div>
+          </div>}
         </header>
       )}
 
@@ -124,9 +126,11 @@ export default function ChannelPage() {
         <section className="mb-8">
           <div className="mb-3 flex items-baseline justify-between">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-400">Series</h2>
-            <Link to={`/series/new?channel=${channelId}`} className="text-xs text-neutral-400 hover:text-white">
-              + New series
-            </Link>
+            {isAdmin && (
+              <Link to={`/series/new?channel=${channelId}`} className="text-xs text-neutral-400 hover:text-white">
+                + New series
+              </Link>
+            )}
           </div>
           <div className="no-scrollbar -mx-4 flex gap-3 overflow-x-auto px-4">
             {seriesList.data
@@ -158,7 +162,7 @@ export default function ChannelPage() {
         </section>
       )}
 
-      {c && !syncing && (
+      {c && !syncing && isAdmin && (
         <Organise
           channelId={channelId}
           onChange={() => {

@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { api, qs, type Series, type SeriesDetail } from '../api'
 import { useApi } from '../hooks'
+import { useIsAdmin } from '../auth'
 import VideoCard from '../components/VideoCard'
 import { fmtDate } from '../lib/format'
 
@@ -71,6 +72,7 @@ function RulePreview({ channelId, pattern }: { channelId: string; pattern: strin
 
 function SeriesDetailPage({ id }: { id: string }) {
   const nav = useNavigate()
+  const isAdmin = useIsAdmin()
   const s = useApi<SeriesDetail>(`/api/series/${id}`)
   const [newPattern, setNewPattern] = useState('')
   const [editing, setEditing] = useState(false)
@@ -117,9 +119,11 @@ function SeriesDetailPage({ id }: { id: string }) {
               {watched > 0 ? 'Continue' : 'Start'} · #{d.videos.indexOf(firstUnwatched) + 1}
             </Link>
           )}
-          <button onClick={() => setEditing(!editing)} className="rounded-lg border border-neutral-700 px-3 py-1.5 hover:bg-neutral-800">
-            {editing ? 'Done' : 'Edit rules'}
-          </button>
+          {isAdmin && (
+            <button onClick={() => setEditing(!editing)} className="rounded-lg border border-neutral-700 px-3 py-1.5 hover:bg-neutral-800">
+              {editing ? 'Done' : 'Edit rules'}
+            </button>
+          )}
         </div>
       </header>
 
@@ -209,7 +213,7 @@ function SeriesDetailPage({ id }: { id: string }) {
           </li>
         ))}
       </ol>
-      {d.videos.length === 0 && <p className="py-10 text-center text-neutral-500">No videos match this series yet. Add a rule above.</p>}
+      {d.videos.length === 0 && <p className="py-10 text-center text-neutral-500">No videos in this series yet.{isAdmin && ' Add a rule above.'}</p>}
     </div>
   )
 }

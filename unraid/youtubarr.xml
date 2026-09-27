@@ -20,6 +20,6 @@
   <Config Name="Data" Target="/data" Default="/mnt/user/appdata/youtubarr" Mode="rw" Description="SQLite database" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/youtubarr</Config>
   <Config Name="Media" Target="/media" Default="/mnt/user/media/youtubarr" Mode="rw" Description="Where yt-dlp downloads land (optional feature; can stay empty)" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/media/youtubarr</Config>
   <Config Name="YouTube API key" Target="YOUTUBE_API_KEY" Default="" Mode="" Description="YouTube Data API v3 key. Can also be set later from the app's Settings page." Type="Variable" Display="always" Required="false" Mask="true"></Config>
-  <Config Name="App password" Target="APP_PASSWORD" Default="" Mode="" Description="Single-user login. Strongly recommended if exposed through a Cloudflare tunnel." Type="Variable" Display="always" Required="false" Mask="true"></Config>
+  <Config Name="Admin password (first run only)" Target="APP_PASSWORD" Default="" Mode="" Description="Optional. On first start this becomes the password of the 'admin' account (8+ chars). Leave blank to create the admin from the web UI instead. Add friends as users from Settings." Type="Variable" Display="always" Required="false" Mask="true"></Config>
   <Config Name="Timezone" Target="TZ" Default="America/New_York" Mode="" Description="" Type="Variable" Display="advanced" Required="false" Mask="false">America/New_York</Config>
 </Container>

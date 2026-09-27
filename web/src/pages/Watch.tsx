@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { api, type Series, type SeriesDetail, type Video, type VideoDetail } from '../api'
 import { useApi, useLocalStorage } from '../hooks'
+import { useIsAdmin } from '../auth'
 import Player, { type PlayerHandle, type PlayerState } from '../components/Player'
 import VideoCard, { SeriesPill } from '../components/VideoCard'
 import { fmtCount, fmtDate, fmtDuration } from '../lib/format'
@@ -11,6 +12,7 @@ const RATES = [0.75, 1, 1.25, 1.5, 1.75, 2]
 export default function WatchPage() {
   const { videoId = '' } = useParams()
   const nav = useNavigate()
+  const isAdmin = useIsAdmin()
   const video = useApi<VideoDetail>(`/api/videos/${videoId}`)
   const v = video.data
   const series = useApi<SeriesDetail>(v?.series_id ? `/api/series/${v.series_id}` : null)
@@ -204,27 +206,31 @@ export default function WatchPage() {
                   <SeriesPill name={`${v.series_name}${v.episode ? ` · ${v.episode.index}/${v.episode.total}` : ''}`} color={v.series_color} />
                 </Link>
               )}
-              <select
-                value={v.series_id ?? ''}
-                onChange={(e) =>
-                  api(`/api/videos/${v.id}/series`, { method: 'PUT', json: { seriesId: e.target.value ? Number(e.target.value) : null } }).then(video.reload)
-                }
-                className="rounded-md bg-neutral-800 px-1.5 py-0.5 text-xs"
-                title="Assign this video to a series"
-              >
-                <option value="">— no series —</option>
-                {allSeries.data?.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-              {v.series_manual === 1 && (
-                <button onClick={() => api(`/api/videos/${v.id}/series`, { method: 'DELETE' }).then(video.reload)} className="underline" title="Remove manual override">
-                  manual
-                </button>
+              {isAdmin && (
+                <>
+                  <select
+                    value={v.series_id ?? ''}
+                    onChange={(e) =>
+                      api(`/api/videos/${v.id}/series`, { method: 'PUT', json: { seriesId: e.target.value ? Number(e.target.value) : null } }).then(video.reload)
+                    }
+                    className="rounded-md bg-neutral-800 px-1.5 py-0.5 text-xs"
+                    title="Assign this video to a series"
+                  >
+                    <option value="">— no series —</option>
+                    {allSeries.data?.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                  {v.series_manual === 1 && (
+                    <button onClick={() => api(`/api/videos/${v.id}/series`, { method: 'DELETE' }).then(video.reload)} className="underline" title="Remove manual override">
+                      manual
+                    </button>
+                  )}
+                  <DownloadButton v={v} onChange={video.reload} />
+                </>
               )}
-              <DownloadButton v={v} onChange={video.reload} />
               <a href={`https://www.youtube.com/watch?v=${v.id}`} target="_blank" rel="noreferrer" className="hover:text-white">
                 YouTube ↗
               </a>
@@ -256,7 +262,7 @@ export default function WatchPage() {
             <EpisodeList videos={series.data.videos} currentId={v.id} />
           ) : (
             <p className="text-sm text-neutral-500">
-              Not part of a series. Assign one above, or <Link to={`/series/new?channel=${v.channel_id}`} className="underline">create one</Link>.
+              Not part of a series.{isAdmin && <> Assign one above, or <Link to={`/series/new?channel=${v.channel_id}`} className="underline">create one</Link>.</>}
             </p>
           )
         ) : (
