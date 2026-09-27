@@ -1,0 +1,15 @@
+services:
+  youtubarr:
+    image: ghcr.io/drxen00/youtubarr:latest
+    # build: .                               # uncomment to build from source on the Unraid box instead
+    container_name: youtubarr
+    restart: unless-stopped
+    ports:
+      - "8790:8790"
+    environment:
+      YOUTUBE_API_KEY: ""     # or set it in the app's Settings page
+      APP_PASSWORD: ""        # set this if you expose the app publicly
+      TZ: "America/New_York"
+    volumes:
+      - /mnt/user/appdata/youtubarr:/data
+      - /mnt/user/media/youtubarr:/media
