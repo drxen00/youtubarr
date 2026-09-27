@@ -81,8 +81,9 @@ export default function ChannelPage() {
 
   return (
     <div className="pb-16">
-      {/* ---- hero */}
-      <div className="relative">
+      {/* ---- hero. z-20 lifts it (and the Download menu inside it) above the content below; the header's
+             fade-in animation creates its own stacking context, which would otherwise trap the menu. */}
+      <div className="relative z-20">
         {c?.banner_url && (
           <div className="absolute inset-0 -z-10 overflow-hidden">
             <img src={`${c.banner_url}=w2120`} alt="" className="size-full scale-110 object-cover opacity-40 blur-2xl" />
